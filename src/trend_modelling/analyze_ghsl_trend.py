@@ -87,8 +87,11 @@ for region in REGIONS:
               f"{100-pct_growth_flood_prone:.1f}% in flood-safe areas")
 
         # Compare to overall flood-prone share of land, to see if growth is DISPROPORTIONATE
-        overall_flood_prone_share = 100 * flood_prone.sum() / flood_prone.size
-        print(f"  (for reference: {overall_flood_prone_share:.1f}% of all land in this region is flood-prone)")
+        with rasterio.open(Path("data/processed") / f"{region}_feature_stack.tif") as _s:
+            _names = list(_s.descriptions)
+            _water = _s.read(_names.index("WATER_MASK") + 1) == 1
+        overall_flood_prone_share = 100 * (flood_prone[~_water] == 1).mean()
+        print(f"  (for reference: {overall_flood_prone_share:.1f}% of land, water excluded, in this region is flood-prone)")
         if pct_growth_flood_prone > overall_flood_prone_share:
             print(f"  -> Growth is DISPROPORTIONATELY concentrated in flood-prone terrain "
                   f"(+{pct_growth_flood_prone - overall_flood_prone_share:.1f} points vs baseline)")

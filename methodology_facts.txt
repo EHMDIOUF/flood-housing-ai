@@ -1,0 +1,291 @@
+
+===== regions.py =====
+"""
+Bounding boxes for the two study regions.
+These are APPROXIMATE first-pass extents based on the proposal's named
+corridors -- refine by inspecting the exported imagery/footprints and
+tightening these boxes in Step 5 if needed.
+"""
+
+REGIONS = {
+    "region_a_kelani": {
+        "label": "Lower Kelani River basin (Colombo/Gampaha, Sri Lanka)",
+        "bbox": [79.83, 6.85, 80.05, 7.05],  # [minLon, minLat, maxLon, maxLat]
+        "country_iso": "LKA",
+    },
+    "region_b_dakar": {
+        "label": "Dakar northern suburbs (Pikine/Guediawaye/Keur Massar, Senegal)",
+        "bbox": [-17.47, 14.68, -17.28, 14.82],
+        "country_iso": "SEN",
+    },
+}
+
+===== src/ingestion/export_to_drive.py =====
+4:ESA WorldCover, WorldPop population, and Google Open Buildings footprints.
+25:def export_image(image, description, folder, region, scale, crs="EPSG:4326"):
+31:        scale=scale,
+32:        crs=crs,
+60:    # --- Sentinel-2 optical: cloud-filtered median composite, 4 bands + NIR ---
+62:        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+64:        .filterDate("2024-01-01", "2025-06-30")
+65:        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 20))
+66:        .median()
+67:        .select(["B2", "B3", "B4", "B8"])
+70:    submitted.append(export_image(s2, f"{region_key}_s2_composite", drive_folder, geom, scale=10))
+72:    # --- Sentinel-1 SAR: VV/VH median composite (IW mode) ---
+74:        ee.ImageCollection("COPERNICUS/S1_GRD")
+76:        .filterDate("2024-01-01", "2025-06-30")
+80:        .select(["VV", "VH"])
+81:        .median()
+84:    submitted.append(export_image(s1, f"{region_key}_s1_composite", drive_folder, geom, scale=10))
+86:    # --- DEM: Copernicus GLO-30 ---
+87:    dem = ee.ImageCollection("COPERNICUS/DEM/GLO30_2024_1").select("DEM").mosaic().clip(geom)
+88:    submitted.append(export_image(dem, f"{region_key}_dem", drive_folder, geom, scale=30))
+90:    # --- ESA WorldCover 2021 land cover ---
+91:    worldcover = ee.Image("ESA/WorldCover/v200/2021").select("Map").clip(geom)
+92:    submitted.append(export_image(worldcover, f"{region_key}_worldcover", drive_folder, geom, scale=10))
+94:    # --- WorldPop population, most recent available year ---
+95:    worldpop = (
+96:        ee.ImageCollection("WorldPop/GP/100m/pop")
+102:    submitted.append(export_image(worldpop, f"{region_key}_worldpop", drive_folder, geom, scale=100))
+105:    buildings = ee.FeatureCollection("GOOGLE/Research/open-buildings/v3/polygons").filterBounds(geom)
+
+===== src/ingestion/export_s2_with_swir.py =====
+25:        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+27:        .filterDate("2024-01-01", "2025-06-30")
+28:        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 20))
+29:        .median()
+30:        .select(BANDS)
+39:        scale=10,
+40:        crs="EPSG:4326",
+
+===== src/ingestion/export_ghsl.py =====
+2:Exports JRC Global Human Settlement Layer (GHSL) built-up surface data
+6:Dataset: JRC/GHSL/P2023A/GHS_BUILT_S -- "built_surface" band gives the
+30:            ee.ImageCollection("JRC/GHSL/P2023A/GHS_BUILT_S")
+31:            .filterDate(f"{epoch}-01-01", f"{epoch}-12-31")
+33:            .select("built_surface")
+39:            description=f"{region_key}_ghsl_{epoch}",
+42:            scale=100,  # GHSL's native resolution for this product
+43:            crs="EPSG:4326",
+47:        print(f"submitted: {region_key}_ghsl_{epoch} (id={task.id})")
+50:print(f"\nSubmitted {len(submitted)} GHSL export tasks.")
+
+===== src/ingestion/export_dem_buffered.py =====
+27:    dem = ee.ImageCollection("COPERNICUS/DEM/GLO30_2024_1").select("DEM").mosaic().clip(geom)
+34:        scale=30,
+35:        crs="EPSG:4326",
+
+===== src/ingestion/export_open_buildings.py =====
+18:KEEP_PROPERTIES = ["area_in_meters", "confidence", "full_plus_code"]
+33:        ee.FeatureCollection("GOOGLE/Research/open-buildings/v3/polygons")
+
+===== generate_labels.py =====
+"""
+Generates a binary built-up label raster (1=built-up, 0=not) aligned to
+the feature stack grid, combining:
+  - ESA WorldCover class 50 (built-up) as the base layer
+  - Google Open Buildings footprints, rasterized and OR'd in, since
+    footprints are generally more spatially precise than WorldCover's
+    10m land-cover classes for pinpointing actual structures
+"""
+import rasterio
+from rasterio.features import rasterize
+import geopandas as gpd
+import numpy as np
+from pathlib import Path
+
+REGIONS = ["region_a_kelani", "region_b_dakar"]
+WORLDCOVER_BUILTUP_CLASS = 50
+
+for region in REGIONS:
+    print(f"\n=== {region} ===")
+    stack_path = Path("data/processed") / f"{region}_feature_stack.tif"
+    buildings_path = Path("data/raw") / region / f"{region}_open_buildings_v2.shp"
+
+    with rasterio.open(stack_path) as src:
+        profile = src.profile.copy()
+        names = list(src.descriptions)
+        transform = src.transform
+        shape = (src.height, src.width)
+        worldcover = src.read(names.index("WorldCover") + 1)
+
+    # Base label from WorldCover
+    label_from_wc = (worldcover == WORLDCOVER_BUILTUP_CLASS).astype(np.uint8)
+    print(f"  WorldCover built-up pixels: {label_from_wc.sum()} ({100*label_from_wc.mean():.2f}%)")
+
+    # Rasterize building footprints
+    gdf = gpd.read_file(buildings_path)
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326")
+    gdf = gdf.to_crs(profile["crs"])
+
+    label_from_buildings = rasterize(
+        [(geom, 1) for geom in gdf.geometry if geom is not None and not geom.is_empty],
+        out_shape=shape,
+        transform=transform,
+        fill=0,
+        dtype=np.uint8,
+        all_touched=True,
+    )
+    print(f"  Building-footprint pixels: {label_from_buildings.sum()} ({100*label_from_buildings.mean():.2f}%)")
+
+    # Combine: built-up if EITHER source says so
+    combined_label = np.maximum(label_from_wc, label_from_buildings)
+    print(f"  Combined built-up pixels: {combined_label.sum()} ({100*combined_label.mean():.2f}%)")
+
+    out_profile = profile.copy()
+    out_profile.update(count=1, dtype="uint8", compress="lzw")
+    out_path = Path("data/processed") / f"{region}_builtup_label.tif"
+    with rasterio.open(out_path, "w", **out_profile) as dst:
+        dst.write(combined_label[np.newaxis, :, :])
+        dst.set_band_description(1, "BUILTUP_LABEL")
+
+    print(f"  saved: {out_path}")
+
+===== build_feature_stack.py =====
+2:Phase 1 preprocessing: resample all layers onto the Sentinel-2 10m grid,
+3:compute NDVI and NDBI, and write one aligned multi-band GeoTIFF per region.
+8:  7: B12 (SWIR2)    8: NDVI           9: NDBI
+10:  12: DEM           13: WorldCover    14: WorldPop
+13:from rasterio.warp import reproject, Resampling
+20:def resample_to_reference(src_path, ref_profile, resampling_method):
+21:    """Read src_path and resample it onto the reference grid/profile."""
+28:            src_crs=src.crs,
+30:            dst_crs=ref_profile["crs"],
+31:            resampling=resampling_method,
+51:    ndvi = (B8 - B4) / (B8 + B4 + eps)
+52:    ndbi = (B11 - B8) / (B11 + B8 + eps)
+54:    # --- Resample Sentinel-1 (bilinear: continuous backscatter) ---
+57:        s1_vv = resample_to_reference(s1_path, ref_profile, Resampling.bilinear) if src.count >= 1 else None
+61:    # Resample VV and VH bands individually
+62:    def resample_band(path, band_idx, method):
+69:                src_crs=src.crs,
+71:                dst_crs=ref_profile["crs"],
+72:                resampling=method,
+76:    s1_vv = resample_band(s1_path, 1, Resampling.bilinear)
+77:    s1_vh = resample_band(s1_path, 2, Resampling.bilinear)
+79:    # --- Resample DEM (bilinear: continuous elevation) ---
+80:    dem_path = base / f"{region}_dem.tif"
+81:    dem = resample_band(dem_path, 1, Resampling.bilinear)
+83:    # --- Resample WorldCover (nearest: categorical land-cover classes) ---
+85:    worldcover = resample_band(wc_path, 1, Resampling.nearest)
+87:    # --- Resample WorldPop (bilinear: continuous population density) ---
+88:    wp_path = base / f"{region}_worldpop.tif"
+89:    worldpop = resample_band(wp_path, 1, Resampling.bilinear)
+93:        [B2, B3, B4, B8, B8A, B11, B12, ndvi, ndbi, s1_vv, s1_vh, dem, worldcover, worldpop],
+98:        "NDVI", "NDBI", "S1_VV", "S1_VH", "DEM", "WorldCover", "WorldPop",
+
+===== train_rf.py =====
+3:CHECKERBOARD spatial split (avoids the distribution-shift problem of a
+5:  1. Held-out checkerboard tiles within Region A (same-region baseline)
+8:Reports balanced accuracy and macro-F1 alongside raw precision/recall/F1,
+17:    accuracy_score, balanced_accuracy_score,
+27:TILE_SIZE = 64  # pixels; checkerboard cell size
+43:def checkerboard_mask(H, W, tile_size):
+44:    """True = train tile, False = test tile, in a checkerboard pattern."""
+45:    row_tile = (np.arange(H) // tile_size)[:, None]
+46:    col_tile = (np.arange(W) // tile_size)[None, :]
+47:    return ((row_tile + col_tile) % 2 == 0)
+64:    bal_acc = balanced_accuracy_score(y, pred)
+68:    print(f"\n--- {name} ---")
+69:    print(f"  n={len(y)}  built-up rate={y.mean():.4f}")
+70:    print(f"  Accuracy:          {acc:.4f}")
+71:    print(f"  Balanced accuracy: {bal_acc:.4f}   <-- fair metric across class balance")
+72:    print(f"  Macro F1:          {macro_f1:.4f}   <-- fair metric across class balance")
+73:    print(f"  Precision (pos):   {prec:.4f}")
+74:    print(f"  Recall (pos):      {rec:.4f}")
+75:    print(f"  F1 (pos class):    {f1:.4f}")
+76:    print(f"  Confusion matrix [[TN, FP],[FN, TP]]:\n{cm}")
+79:print("Loading Region A (training)...")
+82:train_mask = checkerboard_mask(H, W, TILE_SIZE)
+88:print(f"Train pixels: {len(y_train)}  (built-up rate: {y_train.mean():.4f})")
+89:print(f"Held-out Region A test pixels: {len(y_test_a)}  (built-up rate: {y_test_a.mean():.4f})")
+91:print("\nTraining Random Forest...")
+93:    n_estimators=200, max_depth=20, min_samples_leaf=5,
+94:    n_jobs=-1, random_state=42, class_weight="balanced",
+98:evaluate("Region A held-out checkerboard tiles (same-region baseline)", clf, X_test_a, y_test_a)
+100:print("\nLoading Region B (cross-region transfer test)...")
+109:print("\n--- Feature importances ---")
+111:    print(f"  {name:8s} {imp:.4f}")
+113:print("\nModel saved to models/rf_builtup_trainA.pkl")
+
+===== build_exposure_map.py =====
+"""
+Builds the flood exposure map for both regions:
+  1. Flood-prone mask: HAND < 5m (literature-standard threshold)
+  2. Exposure = flood-prone AND built-up (from Phase 1's combined label)
+Reports area statistics and saves both the flood-prone mask and the
+final exposure raster.
+"""
+import rasterio
+import numpy as np
+from pathlib import Path
+
+REGIONS = ["region_a_kelani", "region_b_dakar"]
+HAND_THRESHOLD_M = 5.0
+
+for region in REGIONS:
+    print(f"\n=== {region} ===")
+    stack_path = Path("data/processed") / f"{region}_feature_stack.tif"
+    label_path = Path("data/processed") / f"{region}_builtup_label.tif"
+
+    with rasterio.open(stack_path) as src:
+        profile = src.profile.copy()
+        names = list(src.descriptions)
+        hand = src.read(names.index("HAND") + 1)
+        water_mask = src.read(names.index("WATER_MASK") + 1)
+
+    with rasterio.open(label_path) as src:
+        builtup = src.read(1)
+
+    # --- Flood-prone mask (exclude water pixels -- flood-proneness of open water is meaningless) ---
+    flood_prone = (hand < HAND_THRESHOLD_M).astype(np.uint8)
+    flood_prone[water_mask == 1] = 0
+
+    land_pixels = (water_mask == 0).sum()
+    flood_prone_pixels = flood_prone.sum()
+    print(f"  Flood-prone (HAND < {HAND_THRESHOLD_M}m) land pixels: {flood_prone_pixels} "
+          f"({100*flood_prone_pixels/land_pixels:.2f}% of land area)")
+
+    # --- Exposure: flood-prone AND built-up ---
+    exposure = ((flood_prone == 1) & (builtup == 1)).astype(np.uint8)
+    builtup_land_pixels = ((builtup == 1) & (water_mask == 0)).sum()
+    exposure_pixels = exposure.sum()
+
+    print(f"  Built-up land pixels: {builtup_land_pixels}")
+    print(f"  Exposed (flood-prone + built-up) pixels: {exposure_pixels} "
+          f"({100*exposure_pixels/builtup_land_pixels:.2f}% of built-up area is flood-exposed)")
+
+    # --- Save flood-prone mask ---
+    out_profile = profile.copy()
+    out_profile.update(count=1, dtype="uint8", compress="lzw")
+
+    fp_path = Path("data/processed") / f"{region}_flood_prone_mask.tif"
+    with rasterio.open(fp_path, "w", **out_profile) as dst:
+        dst.write(flood_prone[np.newaxis, :, :])
+        dst.set_band_description(1, "FLOOD_PRONE")
+    print(f"  Saved: {fp_path}")
+
+    # --- Save exposure map ---
+    exp_path = Path("data/processed") / f"{region}_exposure_map.tif"
+    with rasterio.open(exp_path, "w", **out_profile) as dst:
+        dst.write(exposure[np.newaxis, :, :])
+        dst.set_band_description(1, "EXPOSED")
+    print(f"  Saved: {exp_path}")
+
+===== compute_kpis_v2.py =====
+3:  - Risk tiers (High/Medium/Low) based on HAND thresholds, as % of built-up area
+4:  - Estimated population exposed (WorldPop summed over exposed pixels)
+14:# Risk tiers based on HAND (m): lower = higher risk
+26:        worldpop = src.read(names.index("WorldPop") + 1)
+36:    n_builtup = builtup_land.sum()
+42:    pct_high = 100 * high_risk.sum() / n_builtup
+43:    pct_medium = 100 * medium_risk.sum() / n_builtup
+44:    pct_low = 100 * low_risk.sum() / n_builtup
+46:    print(f"  Risk tiers (of built-up area): High={pct_high:.1f}% Medium={pct_medium:.1f}% Low={pct_low:.1f}%")
+48:    pop_exposed = float(worldpop[exposure == 1].sum())
+49:    pop_total_builtup = float(worldpop[builtup_land].sum())
+50:    print(f"  Estimated population exposed: {pop_exposed:,.0f} (of ~{pop_total_builtup:,.0f} in built-up areas)")
+55:    kpis[region]["population_exposed"] = pop_exposed
+56:    kpis[region]["population_total_builtup"] = pop_total_builtup

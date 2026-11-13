@@ -27,7 +27,7 @@ REGIONS = {
 }
 PROJECT_TITLE = "Flood-Exposed Housing Detection System"
 AUTHOR = "El Hadji Malick Diouf"  # <-- edit to your actual name
-SUPERVISOR = "[Supervisor Name]"  # <-- edit
+SUPERVISOR = "Dr. BVKI Vidanage"  # <-- edit
 INSTITUTION = "Faculty of Computing, General Sir John Kotelawala Defence University"
 
 # ---------------------------------------------------------------- THEME
@@ -187,7 +187,7 @@ kpis = load_kpis()
 
 # ---------------------------------------------------------------- SIDEBAR
 with st.sidebar:
-    st.title("🌊 FYP Dashboard")
+    st.title("Dashboard")
     st.caption(INSTITUTION)
     st.markdown("---")
     theme_choice = st.radio("Theme", ["Dark", "Light"], index=0 if st.session_state.theme == "dark" else 1, horizontal=True)
@@ -207,7 +207,7 @@ with st.sidebar:
 
 # ================================================================== PAGE 1
 if page == "1. Executive Summary":
-    st.markdown(f'<div class="kdu-header"><h1>🌊 {PROJECT_TITLE}</h1>'
+    st.markdown(f'<div class="kdu-header"><h1> {PROJECT_TITLE}</h1>'
                 f'<p>Cross-region built-up mapping, flood-proneness, and exposure analysis</p></div>',
                 unsafe_allow_html=True)
 
