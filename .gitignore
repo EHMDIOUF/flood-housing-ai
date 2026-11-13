@@ -13,3 +13,6 @@ __pycache__/
 *.bak
 rasterio
 .agents/
+*.bak
+rasterio
+.agents/
