@@ -16,3 +16,6 @@ rasterio
 *.bak
 rasterio
 .agents/
+*.bak
+rasterio
+.agents/
