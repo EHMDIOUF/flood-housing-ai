@@ -9,6 +9,7 @@ __pycache__/
 .vscode/
 *.tif
 *.tiff
-.agents/
+*.bak
 *.bak
 rasterio
+.agents/
