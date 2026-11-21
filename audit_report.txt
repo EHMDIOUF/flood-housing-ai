@@ -1,0 +1,91 @@
+=== EMPTY FOLDERS (ignoring venv, .git) ===
+./data/processed/region_a_kelani
+./data/processed/region_b_dakar
+./notebooks
+./results/tables
+./src/transferability
+
+=== FILES PER TOP-LEVEL FOLDER ===
+75  data/
+1  docs/
+4  models/
+0  notebooks/
+16  results/
+49  src/
+
+=== SUBFOLDERS WITH FILE COUNTS (2 levels) ===
+30  ./data/processed
+45  ./data/raw
+16  ./results/figures
+0  ./results/tables
+3  ./src/builtup_mapping
+4  ./src/config
+5  ./src/dashboard
+4  ./src/explainability
+4  ./src/exposure
+2  ./src/flood_layer
+16  ./src/ingestion
+4  ./src/preprocessing
+0  ./src/transferability
+7  ./src/trend_modelling
+
+=== KEY OUTPUTS THE THESIS USES ===
+OK       data/processed/region_a_kelani_feature_stack.tif
+OK       data/processed/region_a_kelani_builtup_label.tif
+OK       data/processed/region_b_dakar_feature_stack.tif
+OK       data/processed/region_b_dakar_builtup_label.tif
+MISSING  results/pixel_counts.csv
+MISSING  results/model_comparison.csv
+
+=== RESULT FILES BY NAME ===
+figures
+tables
+
+=== SCRIPTS ===
+src/builtup_mapping/__init__.py
+src/builtup_mapping/train_rf.py
+src/builtup_mapping/train_rf_reverse.py
+src/config/__init__.py
+src/config/regions.py
+src/dashboard/app_pro.py
+src/dashboard/app.py
+src/dashboard/compute_kpis.py
+src/dashboard/compute_kpis_v2.py
+src/dashboard/__init__.py
+src/explainability/__init__.py
+src/explainability/run_shap_analysis.py
+src/explainability/shap_significance_test.py
+src/explainability/train_surrogate.py
+src/exposure/build_exposure_map.py
+src/exposure/__init__.py
+src/exposure/render_builtup_maps.py
+src/exposure/render_exposure_preview.py
+src/flood_layer/compute_hand.py
+src/flood_layer/__init__.py
+src/ingestion/check_tasks.py
+src/ingestion/export_dem_buffered.py
+src/ingestion/export_ghsl.py
+src/ingestion/export_open_buildings.py
+src/ingestion/export_s2_with_swir.py
+src/ingestion/export_temporal_snapshots.py
+src/ingestion/export_to_drive.py
+src/ingestion/qa_check.py
+src/ingestion/render_previews.py
+src/ingestion/test_ee_pull.py
+src/ingestion/wait_for_buildings_v2.py
+src/ingestion/wait_for_dem_buffered.py
+src/ingestion/wait_for_ghsl.py
+src/ingestion/wait_for_s2_full.py
+src/ingestion/wait_for_tasks.py
+src/ingestion/wait_for_temporal.py
+src/preprocessing/build_feature_stack.py
+src/preprocessing/fix_worldpop_nans.py
+src/preprocessing/generate_labels.py
+src/preprocessing/__init__.py
+src/trend_modelling/analyze_ghsl_trend.py
+src/trend_modelling/apply_yearly_classifier_normalized.py
+src/trend_modelling/apply_yearly_classifier.py
+src/trend_modelling/build_temporal_features.py
+src/trend_modelling/__init__.py
+src/trend_modelling/project_future_growth.py
+src/trend_modelling/render_growth_overlay.py

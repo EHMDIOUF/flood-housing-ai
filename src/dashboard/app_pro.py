@@ -27,7 +27,7 @@ REGIONS = {
 }
 PROJECT_TITLE = "Flood-Exposed Housing Detection System"
 AUTHOR = "El Hadji Malick Diouf"  # <-- edit to your actual name
-SUPERVISOR = "Dr. BVKI Vidanage"  # <-- edit
+SUPERVISOR = "Dr. BVKI Vidanange"  # <-- edit
 INSTITUTION = "Faculty of Computing, General Sir John Kotelawala Defence University"
 
 # ---------------------------------------------------------------- THEME
@@ -207,7 +207,7 @@ with st.sidebar:
 
 # ================================================================== PAGE 1
 if page == "1. Executive Summary":
-    st.markdown(f'<div class="kdu-header"><h1> {PROJECT_TITLE}</h1>'
+    st.markdown(f'<div class="kdu-header"><h1>🌊 {PROJECT_TITLE}</h1>'
                 f'<p>Cross-region built-up mapping, flood-proneness, and exposure analysis</p></div>',
                 unsafe_allow_html=True)
 
@@ -342,6 +342,57 @@ elif page == "3. Built-up Growth (GHSL)":
     st.info("⚠️ Note: an earlier from-scratch classifier-based yearly trend was found to be dominated "
             "by inter-annual radiometric noise (p > 0.5, non-significant). GHSL was adopted instead, "
             "yielding statistically significant trends (p < 0.01, R² > 0.96) for both regions.")
+
+    st.markdown("---")
+    st.subheader("📈 Illustrative Future Projection (2030 / 2035)")
+    st.caption(
+        "A simple linear extrapolation of the fitted historical trend above, shown with a 95% "
+        "prediction interval. This is **not a validated forecasting model** — it assumes the "
+        "2000-2025 linear trend continues unchanged, and does not model spatial, policy, economic, "
+        "or climate drivers of future growth. See Methodology for full caveats."
+    )
+
+    proj_path = Path("data/processed") / "growth_projection_2030_2035.json"
+    if proj_path.exists():
+        with open(proj_path) as f:
+            projections = json.load(f)
+
+        proj_year = st.radio("Projection year", ["2030", "2035"], horizontal=True, key="proj_year_select")
+
+        pcol1, pcol2 = st.columns(2)
+        for pcol, region in zip([pcol1, pcol2], REGIONS.keys()):
+            proj = projections[region][proj_year]
+            with pcol:
+                st.markdown(f"**{REGIONS[region]}**")
+                st.metric(
+                    "Projected built-up area",
+                    f"{proj['builtup_km2']:.1f} km²",
+                    f"95% PI: {proj['builtup_km2_95pi'][0]:.1f}–{proj['builtup_km2_95pi'][1]:.1f} km²",
+                )
+                st.metric(
+                    "Projected exposed built-up area",
+                    f"{proj['exposed_builtup_km2']:.1f} km²",
+                    f"at constant {kpis[region]['pct_builtup_exposed']:.1f}% exposure ratio",
+                )
+
+        proj_df = pd.DataFrame([
+            {
+                "Region": REGIONS[region],
+                "Year": year,
+                "Projected Built-up (km²)": projections[region][year]["builtup_km2"],
+                "95% PI Low": projections[region][year]["builtup_km2_95pi"][0],
+                "95% PI High": projections[region][year]["builtup_km2_95pi"][1],
+                "Projected Exposed (km²)": projections[region][year]["exposed_builtup_km2"],
+            }
+            for region in REGIONS.keys() for year in ["2030", "2035"]
+        ])
+        df_download_button(proj_df, "growth_projection_2030_2035.csv", "proj_csv")
+        st.dataframe(proj_df, use_container_width=True, hide_index=True)
+    else:
+        st.warning(
+            "Projection data not found. Run `python3 src/trend_modelling/project_future_growth.py` "
+            "first to generate `data/processed/growth_projection_2030_2035.json`."
+        )
 
 # ================================================================== PAGE 4
 elif page == "4. Regional Comparison":
