@@ -1,0 +1,3 @@
+region,total_pixels,valid_pixels,train_pixels,test_pixels,builtup_rate_train,builtup_rate_test,nodata_pixels_excluded,water_pixels
+region_a_kelani,5458600,4740004,2371215,2368789,0.5421,0.5414,7350,712314
+region_b_dakar,3298844,1721274,860091,861183,0.7724,0.7713,0,1577570
